@@ -1,0 +1,35 @@
+version: '3.9'
+
+services:
+  backend-nopie:
+    build:
+      context: ./backend
+      args:
+        CFLAGS: "-O0 -g -fno-pie -no-pie -fno-stack-protector"
+    container_name: vuln-backend-nopie
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/pages:/app/pages
+
+  backend-pie:
+    build:
+      context: ./backend
+      args:
+        CFLAGS: "-O0 -g -fpie -pie -fno-stack-protector"
+    container_name: vuln-backend-pie
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./backend/pages:/app/pages
+
+  backend-canary:
+    build:
+      context: ./backend
+      args:
+        CFLAGS: "-O0 -g -fno-pie -no-pie -fstack-protector-all"
+    container_name: vuln-backend-canary
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./backend/pages:/app/pages
