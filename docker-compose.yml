@@ -1,14 +1,31 @@
 version: '3.9'
 
 services:
-  backend-nopie:
+  backend-noaslr-proc:
+    build:
+      context: ./backend
+      args:
+      # -O0                   コンパイラの最適化を無効化
+      # -g                    デバッグ情報の付与
+      # -fno-pie              PIEコードを生成しない
+      # -no-pie               リンカにPIEを使用しない
+      # -fno-stack-protector  Stack Canaryを無効化
+        CFLAGS: "-O0 -g -fno-pie -no-pie -fno-stack-protector"
+    container_name: vuln-backend-noaslr-proc
+    ports:
+      - "8080:8080"
+    command: ["setarch", "aarch64", "-R", "./vuln_server"]
+    security_opt:
+    - seccomp=unconfined
+
+  backend-aslr:
     build:
       context: ./backend
       args:
         CFLAGS: "-O0 -g -fno-pie -no-pie -fno-stack-protector"
-    container_name: vuln-backend-nopie
+    container_name: vuln-aslr
     ports:
-      - "8080:8080"
+      - "8081:8080"
     volumes:
       - ./backend/pages:/app/pages
 
@@ -19,7 +36,7 @@ services:
         CFLAGS: "-O0 -g -fpie -pie -fno-stack-protector"
     container_name: vuln-backend-pie
     ports:
-      - "8081:8080"
+      - "8082:8080"
     volumes:
       - ./backend/pages:/app/pages
 
@@ -30,6 +47,6 @@ services:
         CFLAGS: "-O0 -g -fno-pie -no-pie -fstack-protector-all"
     container_name: vuln-backend-canary
     ports:
-      - "8082:8080"
+      - "8083:8080"
     volumes:
       - ./backend/pages:/app/pages

@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 # build tools
-RUN apt-get update && apt-get install -y build-essential
+RUN apt-get update && apt-get install -y build-essential util-linux gdb
 
 WORKDIR /app
 

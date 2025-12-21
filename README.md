@@ -16,7 +16,7 @@ C 言語で実装した **意図的に脆弱な Web サーバ** を用いて、
 
 ## 特徴
 
-* Docker により **環境依存なく再現可能**
+* Docker により 環境依存なく再現可能
 * `/debug` エンドポイントで
 
   * 関数アドレス
@@ -27,8 +27,8 @@ C 言語で実装した **意図的に脆弱な Web サーバ** を用いて、
 * `/smash` エンドポイントで
 
   * Stack Buffer Overflow を意図的に発生
-  * **Canary OFF / ON の挙動差**を実体験
-* **PIE / non-PIE / Canary** を比較可能
+  * Canary OFF / ON の挙動差を実体験
+* PIE / non-PIE / Canary を比較可能
 
 ---
 
@@ -37,23 +37,6 @@ C 言語で実装した **意図的に脆弱な Web サーバ** を用いて、
 * macOS (Apple Silicon)
 * Docker / Docker Compose
 * Ubuntu 22.04 (aarch64)
-* gcc
-
----
-
-## ディレクトリ構成
-
-```
-vulnweb/
-├── backend/
-│   ├── Dockerfile
-│   ├── src/
-│   │   └── main.c
-│   └── pages/
-│       └── index.html
-├── docker-compose.yml
-└── README.md
-```
 
 ---
 
@@ -68,9 +51,10 @@ docker compose up
 
 | ポート  | 構成                                        |
 | ---- | ----------------------------------------- |
-| 8080 | non-PIE / Canary OFF                      |
-| 8081 | PIE / Canary OFF                          |
-| 8082 | PIE / Canary ON (`-fstack-protector-all`) |
+| 8080 | ASLR OFF / PIE OFF / Canary OFF                      |
+| 8081 | ASLR ON / PIE OFF / Canary OFF                          |
+| 8081 | ASLR ON / PIE ON / Canary OFF                          |
+| 8083 | PIE / Canary ON (`-fstack-protector-all`) |
 
 ---
 
@@ -89,13 +73,12 @@ curl http://localhost:8080/debug
 * ASLR 状態 (`/proc/sys/kernel/randomize_va_space`)
 * `/proc/self/maps` 抜粋
 
-### 観察ポイント
+## `/canary` : Stack Canary の検証
 
-* **no-PIE** では `/app/vuln_server` が `0x00400000` 付近に固定
-* **PIE** では `/app/vuln_server` のベースアドレスが毎回変化
-* stack / heap / libc は ASLR により高位アドレスに配置
+```bash
+curl http://localhost:8082/canary
+```
 
----
 
 ## `/smash` : Stack Canary の検証
 
@@ -131,52 +114,10 @@ curl: (52) Empty reply from server
 
 ---
 
-## Stack Canary の実体確認（gdb）
-
-### gdb のインストール（コンテナ内）
-
-```bash
-apt-get update
-apt-get install -y gdb
-```
-
-### Canary の値を確認
-
-```gdb
-(gdb) break main
-(gdb) run
-(gdb) p/x __stack_chk_guard
-```
-
-例:
-
-```text
-0x43d07816b4df4200
-```
-
-* これは **TLS (Thread Local Storage)** に保存されている比較用 canary
-* スタック上にはこの **コピー** が配置される
-
-### 重要事項
-
-* `&__stack_chk_guard` が示すアドレスは TLS 記述子
-* 実行時の実メモリアドレスとは一致しない（正常な挙動）
-
----
-
-## 技術的ポイント
-
-* Stack Canary は **スタックに本体があるわけではない**
-* 比較用の値は TLS に保存される
-* スタック破壊自体は防げないが、**制御フロー破壊前に検知して abort** する
-* `-fstack-protector-strong` では挿入されない関数が存在する
-* 教材用途では `-fstack-protector-all` が確実
-
----
 
 ## 注意事項
 
-* 本リポジトリは **学習目的専用**です
+* 本リポジトリは 学習目的専用です
 * 実運用環境や第三者システムに対して使用しないでください
 
 ---
@@ -185,7 +126,7 @@ apt-get install -y gdb
 
 * PIE / ASLR / Canary はそれぞれ役割が異なる
 * 多層防御で初めて意味を持つ
-* **実際に壊して、落ちて、アドレスを見る**ことで理解が深まる
+* 実際に壊して、落ちて、アドレスを見ることで理解が深まる
 
 ---
 

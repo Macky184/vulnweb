@@ -4,10 +4,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <stdint.h>
 
 int main(void);
+static void canary(char *out, int *off, size_t outsz);
 
 static int g_global = 1234;
+extern uintptr_t __stack_chk_guard;
 
 static void send_text(int client, const char *body){
     char header[256];
@@ -44,19 +47,6 @@ static void debug_dump(int client){
         (void*)&main, (void*)&debug_dump, (void*)&g_global, g_global, (void*)&stack_local, heap
     );
 
-    // ASLR status
-    {
-        FILE *fp = fopen("/proc/sys/kernel/randomize_va_space", "r");
-        if (fp) {
-            char buf[32] = {0};
-            fread(buf, 1, sizeof(buf) - 1, fp);
-            fclose(fp);
-            off += snprintf(out + off, sizeof(out) - off,"\n[aslr]\n /pric/sys/kernel/randomize_va_space = %s", buf);
-        } else {
-            off += snprintf(out + off, sizeof(out) - off, "\n[adlr]\n connot read /proc/sys/kernel/randomize_va_space\n");
-        }
-    }
-
     // /proc/self/maps excerpt
     off += snprintf(out + off, sizeof(out) - off, "\n[maps]\n");
     {
@@ -83,6 +73,42 @@ static void smash(int len) {
     volatile char buf[64];
 
     memset((void*)buf, 'A', (size_t)len);
+}
+
+static void canary_dump(int client){
+    char out[8182];
+    int off = 0;
+
+    off += snprintf(out + off, sizeof(out) - off, "try: compare master canary and stack canary copy\n\n");
+    canary(out, &off, sizeof(out));
+    send_text(client, out);
+}
+
+__attribute__((noinline))
+static void canary(char *out, int *off, size_t outsz){
+    volatile char buf[64];
+    memset((void*)buf, 'B', sizeof(buf));
+
+    uintptr_t guard = __stack_chk_guard;
+
+    *off += snprintf(out + *off, outsz - *off,
+        "[canary]\n"
+        "__stack_chk_guard (master) : 0x%016lx\n"
+        " buf addr                 : %p\n",
+        (unsigned long)guard, (void*)buf);
+
+    uintptr_t *p = (uintptr_t *)((uintptr_t)buf + sizeof(buf));
+
+    *off += snprintf(out + *off, outsz - *off,
+        "\n[stack dump after buf]\n"
+        " (dumping 8 words from buf+64)\n");
+    for (int i = 0; i < 8; i++){
+        uintptr_t v = p[i];
+        *off += snprintf(out + *off, outsz - *off,
+            "  *(buf+64+%2d*8) @ %p : 0x%016lx%s\n",
+        i, (void*)&p[i], (unsigned long)v, (v == guard) ? " <=MATCH" : "");
+        if(*off > (int)outsz - 256) break;
+    }
 }
 
 int main(void){
@@ -124,14 +150,16 @@ int main(void){
         if (!strncmp(req, "GET /debug", 10)) {
             debug_dump(client);
         }else if(!strncmp(req, "GET /smash", 10)){
-            int len = 80; // デフォルト(64を越える)
+            int len = 80; // default.BoF will cause
             char *p = strstr(req, "len=");
             if (p){
                 len = atoi(p + 4);
             }
             smash(len);
             send_text(client, "smash done\n");
-        } else {
+        }else if(!strncmp(req, "GET /canary", 11)){
+            canary_dump(client);
+        }else {
             send_text(client, "vuln server alive\ntry: GET /debug or /smash\n");
         }
         close(client);
